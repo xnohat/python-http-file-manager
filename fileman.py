@@ -87,7 +87,15 @@ html_template = r'''
 class SimpleHTTPFileServerRequestHandler(BaseHTTPRequestHandler):
     def get_path_from_request(self):
         urlparse_result = urlparse(self.path)
-        requested_path = Path(unquote(urlparse_result.path).lstrip('/'))
+        path_no_prefix = urlparse_result.path
+        
+        # Handle both /files and /files/ paths
+        if path_no_prefix == self.server.path_prefix.rstrip('/'):
+            path_no_prefix = '/'
+        elif path_no_prefix.startswith(self.server.path_prefix):
+            path_no_prefix = path_no_prefix[len(self.server.path_prefix)-1:]
+        
+        requested_path = Path(unquote(path_no_prefix).lstrip('/'))
         # Convert to absolute path relative to working directory
         absolute_path = (Path(self.server.working_dir) / requested_path).resolve()
         
@@ -125,7 +133,9 @@ class SimpleHTTPFileServerRequestHandler(BaseHTTPRequestHandler):
                 icon = icons['file-earmark-fill']
                 trailing_path = ''
                 html_class = 'file-entry'
-            file_list_html.append(f'<li><a class="{html_class}" href="/{relative_path}{trailing_path}"><span>{icon} {file.name}</span></a></li>')
+            # Add path prefix to URLs
+            prefix = self.server.path_prefix.rstrip('/') if self.server.path_prefix != '/' else ''
+            file_list_html.append(f'<li><a class="{html_class}" href="{prefix}/{relative_path}{trailing_path}"><span>{icon} {file.name}</span></a></li>')
         return out_html.replace('$path', str(path)).replace('$file_list_html', ''.join(file_list_html))
 
     def do_GET(self):
@@ -172,21 +182,26 @@ class SimpleHTTPFileServerRequestHandler(BaseHTTPRequestHandler):
 
 def run_server(
         address, port, working_dir,
+        path_prefix='/',
         server_class = HTTPServer,
         handler_class = SimpleHTTPFileServerRequestHandler,
     ):
     server_address = (address, port)
     httpd = server_class(server_address, handler_class)
-    # Store working directory in server instance
+    # Store working directory and path prefix in server instance
     httpd.working_dir = Path(working_dir).resolve()
+    # Ensure path_prefix starts and ends with /
+    httpd.path_prefix = f"/{path_prefix.strip('/')}/" if path_prefix.strip('/') else '/'
     print(f'Running HTTP file server on {address}:{port}')
     print(f'Serving directory: {httpd.working_dir}')
+    print(f'Path prefix: {httpd.path_prefix}')
     httpd.serve_forever()
 
 if __name__ == '__main__':
     parser = ArgumentParser(description='A simple HTTP file server that supports uploading from the browser')
     parser.add_argument('-b', '--bind', type=str, metavar='ADDRESS', help='bind to address', default='0')
     parser.add_argument('-d', '--directory', type=str, help='working directory to serve', default='.')
+    parser.add_argument('-p', '--prefix', type=str, help='URL path prefix (e.g. /files)', default='/')
     parser.add_argument('port', type=int, nargs='?', help='bind to port', default=8000)
     args = parser.parse_args()
-    run_server(address=args.bind, port=args.port, working_dir=args.directory)
+    run_server(address=args.bind, port=args.port, working_dir=args.directory, path_prefix=args.prefix)
