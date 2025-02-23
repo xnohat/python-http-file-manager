@@ -130,7 +130,10 @@ class SimpleHTTPFileServerRequestHandler(BaseHTTPRequestHandler):
         except ValueError:
             relative_base = Path('.')
             
-        for file in sorted(path.iterdir()):
+        # Filter out hidden files and directories
+        visible_files = [f for f in sorted(path.iterdir()) if not f.name.startswith('.')]
+            
+        for file in visible_files:
             icon, trailing_path, html_class = None, None, None
             # Get relative path for the file/directory
             relative_path = file.relative_to(self.server.working_dir)
