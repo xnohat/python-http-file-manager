@@ -67,7 +67,7 @@ html_template = r'''
         <h1>Path $path</h1>
         <section>
             <h2>Upload file</h2>
-            <form method="post" enctype="multipart/form-data">
+            <form method="post" enctype="multipart/form-data" action="$current_path">
                 <input type="file" name="file" multiple required>
                 <input type="submit" value="Upload">
             </form>
@@ -109,10 +109,20 @@ class SimpleHTTPFileServerRequestHandler(BaseHTTPRequestHandler):
         return absolute_path
 
     def load_html(self, path, uploaded_filenames=[]):
+        # Get the current path for the form action
+        try:
+            relative_path = path.relative_to(self.server.working_dir)
+            prefix = self.server.path_prefix.rstrip('/') if self.server.path_prefix != '/' else ''
+            current_path = f"{prefix}/{relative_path}"
+            if not current_path.endswith('/'):
+                current_path += '/'
+        except ValueError:
+            current_path = self.server.path_prefix
+
         out_html = html_template.replace(
             '$upload_result_html',
             f'<p><span style="font-weight: bold">{len(uploaded_filenames)}</span> files have been uploaded.</p>' if uploaded_filenames else ''
-        )
+        ).replace('$current_path', current_path)
         file_list_html = []
         # Get relative path from working directory
         try:
