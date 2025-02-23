@@ -182,12 +182,26 @@ class SimpleHTTPFileServerRequestHandler(BaseHTTPRequestHandler):
             filename = part.get_filename()
             if filename != None:
                 target_path = Path(path / filename)
-                target_path.write_bytes(part.get_content())
+                # Convert content to bytes if it's a string
+                content = part.get_content()
+                if isinstance(content, str):
+                    content = content.encode('utf-8')
+                target_path.write_bytes(content)
                 filenames.append(filename)
-        self.send_response(201)
-        self.send_header('Content-Type', 'text/html')
+        
+        # Redirect back to the current directory with prefix
+        try:
+            relative_path = path.relative_to(self.server.working_dir)
+            prefix = self.server.path_prefix.rstrip('/') if self.server.path_prefix != '/' else ''
+            redirect_path = f"{prefix}/{relative_path}"
+            if not redirect_path.endswith('/'):
+                redirect_path += '/'
+        except ValueError:
+            redirect_path = self.server.path_prefix
+
+        self.send_response(303)  # See Other
+        self.send_header('Location', redirect_path)
         self.end_headers()
-        self.wfile.write(self.load_html(path, uploaded_filenames=filenames).encode('utf-8'))
 
 
 def run_server(
